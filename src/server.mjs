@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { HOME, MODELS, LOCK, PORT, ROOT, loadConfig, saveConfig, configTime, langOf } from "./config.mjs";
+import { HOME, MODELS, LOCK, PORT, ROOT, loadConfig, saveConfig, configTime, langOf, pronounce } from "./config.mjs";
 import { playerFor, systemSpeech } from "./platform.mjs";
 
 const STALE = 3 * 60_000;   // a recap that waited longer than this is dropped
@@ -47,7 +47,8 @@ async function synth(m) {
   if (!t) return null;
   const voice = voiceFor(m.project);
   styles[voice] ||= t.loadVoiceStyle([path.join(MODELS, "voice_styles", `${voice}.json`)]);
-  const { wav, duration } = await t.call(m.text, m.lang || langOf(cfg, m.project), styles[voice], cfg.steps, cfg.speed);
+  const lang = m.lang || langOf(cfg, m.project);
+  const { wav, duration } = await t.call(pronounce(cfg, m.text, lang), lang, styles[voice], cfg.steps, cfg.speed);
   const n = Math.floor(t.sampleRate * duration[0]);
   const out = effects(Float32Array.from(wav.slice(0, n)), t.sampleRate, cfg.fx, cfg.chimes.enabled ? m.project : null);
   const file = path.join(os.tmpdir(), `claudespeak-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.wav`);

@@ -49,6 +49,7 @@ export const DEFAULTS = {
   steps: 6,                         // Supertonic denoising steps (quality)
   speed: 1.05,
   chimes: { enabled: true, volume: -14, seeds: {} },
+  lexicon: {},                      // per language: term → how to say it, e.g. { tr: { GraphQL: "graf kyu el" } }
   fx: {
     compressor: { enabled: true, threshold: -20, ratio: 2, attack: 0.01, release: 0.15, makeup: 2 },
     reverb: { enabled: true, room: 0.45, damp: 0.5, wet: 0.22, tail: 0.7 },
@@ -62,7 +63,7 @@ export function loadConfig() {
   try { c = JSON.parse(fs.readFileSync(CONFIG, "utf8")); } catch {}
   return {
     ...d, ...c,
-    langs: { ...c.langs }, projects: { ...c.projects },
+    langs: { ...c.langs }, projects: { ...c.projects }, lexicon: { ...c.lexicon },
     chimes: { ...d.chimes, ...c.chimes, seeds: { ...c.chimes?.seeds } },
     fx: {
       ...d.fx, ...c.fx,
@@ -87,3 +88,14 @@ export function voiceOf(c, project) {
   return c.projects[project] || c.rotation[Object.keys(c.projects).length % c.rotation.length];
 }
 export function langOf(c, project) { return c.langs[project] || c.lang; }
+
+/** Whole-word, case-insensitive replacements from the lexicon of a language, longest terms first. */
+export function pronounce(c, text, lang) {
+  const lex = c.lexicon?.[lang];
+  if (!lex) return text;
+  for (const [term, say] of Object.entries(lex).sort((a, b) => b[0].length - a[0].length)) {
+    const re = new RegExp(`(?<![\\p{L}\\p{N}])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "giu");
+    text = text.replace(re, say);
+  }
+  return text;
+}

@@ -9,6 +9,10 @@ still know when something is done or waiting for you.
   leaves your machine.
 - **Real summaries.** The agent's own CLI writes the summary (`claude -p`, Sonnet by default, or `codex exec`),
   in your language, with numbers spelled out and no code or file paths read aloud.
+- **Foreign terms said right.** In a language other than English, the summariser respells product names,
+  English terms and acronyms the way they sound, in that language's letters. In Turkish, for example, macOS
+  becomes "mekos", MIT "em ay ti" and GitHub "githab", so a Turkish voice doesn't read them letter by letter as
+  Turkish. When it gets a term wrong, `pronounce` fixes it for good.
 - **One voice per project.** Every project, named after its git root folder, gets its own voice and a faint
   two-note chime: rising before the summary, falling after. With three agents running in three repos, you can
   tell who is talking.
@@ -82,6 +86,7 @@ From a terminal, run `node bin/claudespeak.mjs …`, or `npm link` once and then
 | `chime off`, `chime volume -20`, `chime reroll` | turn chimes off, set their level, or give a project a different chime |
 | `reverb wet 0.15`, `reverb off` | adjust or turn off the reverb (also `room`, `damp`, `tail`) |
 | `compressor ratio 3 threshold -18`, `compressor off` | adjust or turn off the compressor (also `attack`, `release`, `makeup`) |
+| `pronounce GraphQL graf kyu el`, `unpronounce GraphQL`, `pronunciations` | fix how a term is read in a language (default: this project's) |
 | `test [text]` | say a sample in this project's voice |
 | `skip`, `stop`, `restart` | skip the current summary, clear the queue, or restart the server |
 | `autostart on` / `off` | start the server at login |

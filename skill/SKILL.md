@@ -17,6 +17,8 @@ shell. No request means `toggle`. Commands:
 | `chime [on\|off]` / `chime volume <-40–-3>` / `chime reroll [project\|.]` | the faint per-project chime (rising before, falling after); volume is dB under the voice; reroll picks another |
 | `compressor [on\|off] [threshold dB] [ratio N] [attack s] [release s] [makeup dB]` | e.g. `compressor ratio 3 threshold -18` |
 | `reverb [on\|off] [room 0–1] [damp 0–1] [wet 0–1] [tail s]` | e.g. `reverb wet 0.3`; `wet` is how much of it you hear |
+| `pronounce <term> <how to say it…> [--lang xx]` | fix how a term is read, e.g. `pronounce GraphQL graf kyu el` (language: this project's) |
+| `unpronounce <term>` / `pronunciations` | drop a fix / list them |
 | `peak <-12–0>` | output ceiling, dBFS |
 | `reset` / `reset all` | effects back to defaults / every setting (project voices, languages, chimes kept) |
 | `test [text]` | say a sample in this project's voice, with the current settings |
@@ -24,6 +26,8 @@ shell. No request means `toggle`. Commands:
 | `autostart on\|off\|status` | start the voice server at login |
 | `doctor` | check the setup |
 
+If the user says a word is read wrong ("it says macos, it should be mekos"), that is `pronounce`, with the
+spelling they give or, if they only describe the sound, your best respelling in that language's letters.
 Plain-word requests map onto these: "a bit" means a small step from the current value (run `status` first),
 e.g. "make the reverb a bit lighter" → `reverb wet` about 0.05–0.08 lower; "better quality" → `steps` +2.
 After a change to voice, language, speed, steps, chimes or fx, run `test` too, so it can be heard.

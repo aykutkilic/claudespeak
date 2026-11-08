@@ -1,6 +1,6 @@
 // claudespeak CLI: what /speak (Claude Code) and $speak (Codex) run, plus install / uninstall / doctor.
 import fs from "node:fs";
-import { BASE, OFF, HOME, CONFIG, MODELS, VOICES, LANGS, MODELS_CLAUDE, DEFAULTS, loadConfig, saveConfig, projectOf, voiceOf, langOf } from "./config.mjs";
+import { BASE, OFF, HOME, CONFIG, MODELS, VOICES, LANGS, MODELS_CLAUDE, DEFAULTS, loadConfig, saveConfig, projectOf, voiceOf, langOf, pronounce } from "./config.mjs";
 import { autostart, autostartStatus, playerName, has } from "./platform.mjs";
 import { install, uninstall, modelsReady } from "./install.mjs";
 
@@ -52,6 +52,26 @@ export async function main(argv) {
       else if (m === "codex-model") cfg.codexModel = a[1] || "";
       else throw new Error("model haiku|sonnet|opus (Claude), codex-model <name> (Codex), or auto|claude|codex|none (who summarises)");
       save(); return say(`Summaries by: ${who(cfg)}`);
+    }
+    case "pronounce": case "unpronounce": case "pronunciations": {
+      // pronounce <term> <how to say it…> [--lang xx] · unpronounce <term> [--lang xx] · pronunciations [--lang xx]
+      const li = a.indexOf("--lang"), l = li >= 0 ? a.splice(li, 2)[1]?.toLowerCase() : langOf(cfg, project);
+      if (!LANGS[l]) throw new Error(`language must be one of: ${Object.keys(LANGS).join(", ")}`);
+      const lex = (cfg.lexicon[l] ||= {});
+      if (cmd === "pronunciations" || !a.length) {
+        const all = Object.entries(lex);
+        return say(all.length ? `${LANGS[l]}: ${all.map(([k, v]) => `${k} → ${v}`).join(", ")}` : `No ${LANGS[l]} pronunciations yet`);
+      }
+      const term = a[0];
+      if (cmd === "unpronounce") {
+        const key = Object.keys(lex).find((k) => k.toLowerCase() === term.toLowerCase());
+        if (!key) throw new Error(`no ${LANGS[l]} pronunciation for ${term}`);
+        delete lex[key]; save(); return say(`${term}: back to the model's own spelling (${LANGS[l]})`);
+      }
+      if (a.length < 2) throw new Error("pronounce <term> <how to say it>, e.g. pronounce GraphQL graf kyu el");
+      for (const k of Object.keys(lex)) if (k.toLowerCase() === term.toLowerCase()) delete lex[k];
+      lex[term] = a.slice(1).join(" "); save();
+      return say(`${LANGS[l]}: ${term} → ${lex[term]} (try: test ${term})`);
     }
     case "steps": cfg.steps = Math.round(num(a[0], RANGE.steps, "steps")); save(); return say(`Quality: ${cfg.steps} steps`);
     case "speed": cfg.speed = num(a[0], RANGE.speed, "speed"); save(); return say(`Speed: ${cfg.speed}`);
@@ -119,6 +139,7 @@ const HELP = `claudespeak — spoken summaries for Claude Code and Codex
   compressor [on|off] [threshold dB] [ratio N] [attack s] [release s] [makeup dB]
   reverb [on|off] [room 0–1] [damp 0–1] [wet 0–1] [tail s]
   chime [on|off] | chime volume <dB> | chime reroll [project|.]
+  pronounce <term> <how to say it…> [--lang xx] | unpronounce <term> | pronunciations
   reset [all]   autostart on|off|status`;
 
 function say(s) { console.log(s); }

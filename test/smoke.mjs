@@ -51,6 +51,11 @@ assert.match(cli("model", "none"), /nobody/);
 const bad = spawnSync(process.execPath, [path.join(ROOT, "bin", "claudespeak.mjs"), "speed", "9"], { env, encoding: "utf8" });
 assert.notEqual(bad.status, 0);
 assert.match(cli("status"), /M5/);
+assert.match(cli("pronounce", "GraphQL", "graf", "kyu", "el", "--lang", "tr"), /graf kyu el/);
+assert.match(cli("pronunciations", "--lang", "tr"), /GraphQL → graf kyu el/);
+const { pronounce } = await import(new URL("../src/config.mjs", import.meta.url));
+assert.equal(pronounce(json(path.join(T, ".claudespeak", "config.json")), "graphql şeması, GraphQLx değil", "tr"), "graf kyu el şeması, GraphQLx değil");
+cli("unpronounce", "graphql", "--lang", "tr");
 
 // The hook, with no summariser: the first sentence, made sayable.
 const event = JSON.stringify({ cwd: ROOT, last_assistant_message: "Fixed `src/a.ts:12` in 3.5 ms. More text here." });
