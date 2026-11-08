@@ -44,6 +44,11 @@ assert.ok(fs.existsSync(path.join(T, ".claude", "skills", "speak", "SKILL.md")))
 assert.ok(fs.existsSync(path.join(T, ".agents", "skills", "speak", "SKILL.md")));
 
 // The CLI edits the config; bad values are refused.
+// A fresh config takes the OS language, or English when Supertonic doesn't speak it.
+const { systemLang, LANGS } = await import(new URL("../src/config.mjs", import.meta.url));
+const fresh = json(path.join(T, ".claudespeak", "config.json")).lang;
+assert.equal(fresh, systemLang());
+assert.ok(LANGS[fresh] && fresh !== "na");
 assert.match(cli("voice", "m5"), /M5/);
 assert.match(cli("lang", "en", "."), /English/);
 assert.match(cli("reverb", "wet", "0.3"), /wet 0.3/);

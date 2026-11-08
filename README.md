@@ -92,6 +92,10 @@ From a terminal, run `node bin/claudespeak.mjs …`, or `npm link` once and then
 | `autostart on` / `off` | start the server at login |
 | `reset`, `reset all` | restore the effect defaults / all defaults |
 
+The language starts as your OS's display language: the first of macOS's preferred languages, Windows' UI
+language, or `LC_ALL` / `LC_MESSAGES` / `LANG` on Linux. If Supertonic doesn't speak it, English is used.
+Change it with `lang <code>`; `lang system` detects it again.
+
 Settings live in `~/.claudespeak/config.json`. The server picks up changes immediately.
 
 ## How it works

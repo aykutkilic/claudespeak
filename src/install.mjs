@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HOME, MODELS, CONFIG, ROOT, BASE, loadConfig, saveConfig, systemLang } from "./config.mjs";
+import { HOME, MODELS, CONFIG, ROOT, BASE, loadConfig, saveConfig } from "./config.mjs";
 import { autostart, autostartStatus } from "./platform.mjs";
 
 const REPO = "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46";
@@ -121,7 +121,7 @@ export async function install(args) {
   const codex = want("codex") || (!want("claude") && fs.existsSync(CODEX_DIR));
   if (!claude && !codex) throw new Error("found neither Claude Code (~/.claude) nor Codex (~/.codex); pass --claude or --codex");
   fs.mkdirSync(HOME, { recursive: true });
-  if (!fs.existsSync(CONFIG)) saveConfig({ ...loadConfig(), lang: systemLang() });
+  if (!fs.existsSync(CONFIG)) saveConfig(loadConfig());   // the language starts as the OS's (else English)
   if (!want("no-models")) {
     if (!modelsReady()) console.log("Downloading Supertonic 3 (about 410 MB, once)…");
     await download();

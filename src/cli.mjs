@@ -38,6 +38,7 @@ export async function main(argv) {
       cfg.rotation = a.map(voice); save(); return say("New projects take, in turn: " + cfg.rotation.join(" → "));
     case "lang": {
       if (!a.length) return say(langLine(cfg, project));
+      if (/^(system|os|auto)$/i.test(a[0]) && !a[1]) { cfg.lang = (await import("./config.mjs")).systemLang(); save(); return say(`Global language: ${LANGS[cfg.lang]} (the system's)`); }
       if (/^(reset|default)$/i.test(a[0])) { const p = target(a[1]); delete cfg.langs[p]; save(); return say(`${p} uses the global language: ${LANGS[cfg.lang]}`); }
       const code = a[0].toLowerCase();
       if (!LANGS[code]) throw new Error(`language must be one of: ${Object.keys(LANGS).join(", ")}`);
@@ -103,12 +104,13 @@ export async function main(argv) {
       else { cfg.fx = structuredClone(DEFAULTS.fx); cfg.chimes = { ...structuredClone(DEFAULTS.chimes), seeds: cfg.chimes.seeds }; }
       save(); return say(a[0] === "all" ? "All settings back to defaults (project voices, languages and chimes kept)" : "Effects back to defaults");
     case "test": {
-      const l = langOf(cfg, project);
-      const text = a.join(" ") || (l === "tr" ? `Bu ${project} projesinin sesi. Ayarları duyabilmen için kısa bir deneme.`
-        : `This is the voice of ${project}. A short sample, so you can hear the settings.`);
-      const r = await call("/say", { text, project, lang: l === "na" ? "en" : l });
+      // A sample in the project's language; languages without one hear it in English.
+      const own = langOf(cfg, project), sample = SAMPLES[own];
+      const l = a.length || sample ? (own === "na" ? "en" : own) : "en";
+      const text = a.join(" ") || (sample || SAMPLES.en)(project);
+      const r = await call("/say", { text, project, lang: l });
       if (!r) { (await import("./platform.mjs")).startServer(); await new Promise((res) => setTimeout(res, 1500)); }
-      const r2 = r || (await call("/say", { text, project, lang: l === "na" ? "en" : l }));
+      const r2 = r || (await call("/say", { text, project, lang: l }));
       return say(r2 ? `Sample queued: ${project} (${r2.voice})` : "Couldn't reach the server; see `claudespeak doctor`.");
     }
     case "skip": await call("/skip"); return say("Skipped the recap being read");
@@ -126,6 +128,21 @@ export async function main(argv) {
   }
 }
 
+const SAMPLES = {
+  en: (p) => `This is the voice of ${p}. A short sample, so you can hear the settings.`,
+  tr: (p) => `Bu ${p} projesinin sesi. Ayarları duyabilmen için kısa bir deneme.`,
+  de: (p) => `Das ist die Stimme von ${p}. Ein kurzes Beispiel, damit du die Einstellungen hörst.`,
+  fr: (p) => `Voici la voix de ${p}. Un court essai, pour entendre les réglages.`,
+  es: (p) => `Esta es la voz de ${p}. Una breve muestra para que escuches los ajustes.`,
+  it: (p) => `Questa è la voce di ${p}. Un breve esempio, per sentire le impostazioni.`,
+  pt: (p) => `Esta é a voz de ${p}. Uma pequena amostra, para ouvir as configurações.`,
+  nl: (p) => `Dit is de stem van ${p}. Een kort voorbeeld, zodat je de instellingen hoort.`,
+  ru: (p) => `Это голос проекта ${p}. Короткий пример, чтобы услышать настройки.`,
+  pl: (p) => `To jest głos projektu ${p}. Krótka próbka, żebyś usłyszał ustawienia.`,
+  ja: (p) => `これは${p}の声です。設定を確認するための短いサンプルです。`,
+  ko: (p) => `${p}의 목소리입니다. 설정을 들어 볼 수 있는 짧은 예시입니다.`,
+};
+
 const HELP = `claudespeak — spoken summaries for Claude Code and Codex
   install [--claude] [--codex] [--autostart]   set up (downloads the voice model, ~410 MB, once)
   install --models-only                        just download the model
@@ -133,7 +150,7 @@ const HELP = `claudespeak — spoken summaries for Claude Code and Codex
   status | doctor | voices | test [text] | skip | stop | restart
   on | off | toggle
   voice <F1–F5|M1–M5> [project|.]    rotation <V> <V> …
-  lang <code> [project|.] | lang reset [project|.]
+  lang <code> [project|.] | lang reset [project|.] | lang system
   model haiku|sonnet|opus | auto|claude|codex|none | codex-model <name>
   steps <1–20>   speed <0.7–1.6>   peak <dB>
   compressor [on|off] [threshold dB] [ratio N] [attack s] [release s] [makeup dB]

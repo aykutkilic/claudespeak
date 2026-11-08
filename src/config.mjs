@@ -32,14 +32,22 @@ export const LANGS = {
 };
 export const MODELS_CLAUDE = ["haiku", "sonnet", "opus"];
 
-/** The OS language if Supertonic speaks it, else English. */
+/** The OS's display language (not its region format) if Supertonic speaks it, else English. */
 export function systemLang() {
-  const l = (Intl.DateTimeFormat().resolvedOptions().locale || process.env.LANG || "en").slice(0, 2).toLowerCase();
+  const run = (cmd, args) => {
+    try { const r = spawnSync(cmd, args, { encoding: "utf8", windowsHide: true, timeout: 5000 }); return r.status === 0 ? r.stdout : ""; } catch { return ""; }
+  };
+  let tag = "";
+  if (process.platform === "darwin") tag = (run("defaults", ["read", "-g", "AppleLanguages"]).match(/[A-Za-z]{2,3}(?=[-_",\s)])/) || [""])[0];
+  else if (process.platform === "win32") tag = run("powershell", ["-NoProfile", "-NonInteractive", "-Command", "(Get-UICulture).Name"]).trim();
+  else tag = [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG, process.env.LANGUAGE].find((v) => v && !/^(C|POSIX)([._]|$)/.test(v)) || "";
+  tag ||= Intl.DateTimeFormat().resolvedOptions().locale || "en";
+  const l = tag.slice(0, 2).toLowerCase();
   return LANGS[l] && l !== "na" ? l : "en";
 }
 
 export const DEFAULTS = {
-  lang: "en",                       // replaced by systemLang() when the config is first written
+  lang: "",                         // "" = the OS's display language (systemLang), fixed into the config when first saved
   langs: {},                        // per-project language
   rotation: ["F5", "M2", "M5"],     // voices new projects take in turn
   projects: {},                     // project → voice
@@ -61,7 +69,7 @@ export function loadConfig() {
   const d = structuredClone(DEFAULTS);
   let c = {};
   try { c = JSON.parse(fs.readFileSync(CONFIG, "utf8")); } catch {}
-  return {
+  const out = {
     ...d, ...c,
     langs: { ...c.langs }, projects: { ...c.projects }, lexicon: { ...c.lexicon },
     chimes: { ...d.chimes, ...c.chimes, seeds: { ...c.chimes?.seeds } },
@@ -71,6 +79,8 @@ export function loadConfig() {
       reverb: { ...d.fx.reverb, ...c.fx?.reverb },
     },
   };
+  if (!LANGS[out.lang]) out.lang = systemLang();
+  return out;
 }
 export function saveConfig(c) {
   fs.mkdirSync(HOME, { recursive: true });
