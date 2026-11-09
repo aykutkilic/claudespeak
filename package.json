@@ -3,13 +3,37 @@
   "version": "0.1.0",
   "description": "Spoken summaries for Claude Code and Codex: a local voice (Supertonic 3) reads one or two sentences when an agent finishes, one voice and chime per project, one speaker at a time.",
   "type": "module",
-  "bin": { "claudespeak": "bin/claudespeak.mjs" },
-  "scripts": { "setup": "node bin/claudespeak.mjs install", "test": "node test/smoke.mjs" },
-  "engines": { "node": ">=20" },
-  "os": ["darwin", "win32", "linux"],
-  "dependencies": { "onnxruntime-node": "1.22.0" },
+  "bin": {
+    "claudespeak": "bin/claudespeak.mjs"
+  },
+  "scripts": {
+    "setup": "node bin/claudespeak.mjs install",
+    "test": "node test/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin",
+    "win32",
+    "linux"
+  ],
+  "dependencies": {
+    "onnxruntime-node": "^1.31.1"
+  },
   "license": "MIT",
   "author": "Aykut Kilic",
-  "repository": { "type": "git", "url": "https://github.com/aykutkilic/claudespeak.git" },
-  "keywords": ["claude-code", "codex", "tts", "text-to-speech", "supertonic", "hooks", "voice"]
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aykutkilic/claudespeak.git"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "tts",
+    "text-to-speech",
+    "supertonic",
+    "hooks",
+    "voice"
+  ]
 }
