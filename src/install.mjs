@@ -1,9 +1,10 @@
 // Setup: downloads Supertonic 3 (OpenRAIL-M; fetched from Hugging Face, not shipped here), then wires the
-// hook and the /speak skill into Claude Code and/or Codex. Existing settings are merged, with a backup.
+// turn-end trigger and the /speak skill or command into Claude Code, Codex, Copilot CLI and opencode.
+// Existing settings are merged, with a backup.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HOME, MODELS, CONFIG, ROOT, BASE, loadConfig, saveConfig } from "./config.mjs";
+import { HOME, MODELS, CONFIG, ROOT, BASE, CLAUDE_DIR, CODEX_DIR, COPILOT_DIR, OPENCODE_DIR, loadConfig, saveConfig } from "./config.mjs";
 import { autostart, autostartStatus } from "./platform.mjs";
 
 const REPO = "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46";
@@ -13,8 +14,6 @@ const FILES = {
   ...Object.fromEntries(["F1", "F2", "F3", "F4", "F5", "M1", "M2", "M3", "M4", "M5"].map((v) => [`voice_styles/${v}.json`, 0])),
 };
 const MARK = "--claudespeak";   // tags our hook / notify entries so they can be found again
-const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
-const CODEX_DIR = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const AGENTS_SKILLS = path.join(os.homedir(), ".agents", "skills");
 const q = (p) => (/[\s"]/.test(p) ? `"${p}"` : p);
 const HOOK = path.join(ROOT, "src", "hook.mjs");
@@ -98,36 +97,77 @@ function codexNotify(on) {
   fs.writeFileSync(file, lines.join("\n"));
 }
 
-/** The /speak skill (Claude Code) or $speak skill (Codex), pointing at this checkout's CLI. */
-function skill(dir, flavour, on) {
-  const file = path.join(dir, "speak", "SKILL.md");
+const ours = (file) => fs.existsSync(file) && fs.readFileSync(file, "utf8").includes(MARK);
+const sh = (s) => `'${s.replace(/'/g, `'\\''`)}'`, ps = (s) => `'${s.replace(/'/g, "''")}'`;
+
+/** Copilot CLI's agentStop hook, in a hooks file of our own (Copilot reads every file in ~/.copilot/hooks). */
+function copilotHook(on) {
+  const file = path.join(COPILOT_DIR, "hooks", "claudespeak.json");
+  if (!on) { if (ours(file)) fs.rmSync(file); return; }
+  if (fs.existsSync(file) && !ours(file)) backup(file);
+  const cmd = [process.execPath, HOOK, "--agent", "copilot", "--detach", MARK];
+  const hook = { type: "command", bash: cmd.map(sh).join(" "), powershell: "& " + cmd.map(ps).join(" "), timeoutSec: 15 };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ version: 1, hooks: { agentStop: [hook] } }, null, 2) + "\n");
+}
+
+/** The opencode plugin (opencode loads every file in its plugins folder), pointing at this checkout's hook. */
+function opencodePlugin(on) {
+  const file = path.join(OPENCODE_DIR, "plugins", "claudespeak.js");
+  if (!on) { if (ours(file)) fs.rmSync(file); return; }
+  if (fs.existsSync(file) && !ours(file)) backup(file);
+  const code = fs.readFileSync(path.join(ROOT, "src", "opencode-plugin.js"), "utf8")
+    .replace('"{{NODE}}"', JSON.stringify(process.execPath)).replace('"{{HOOK}}"', JSON.stringify(HOOK));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, code);
+}
+
+const DOES = "on/off, voices, language, summary model, quality, speed, chimes, compressor, reverb, autostart, test";
+const HEAD = {
+  claude: `---\nname: speak\ndescription: claudespeak — spoken summaries when a turn ends. On/off, voices, language, summary model, quality, speed, chimes, compressor, reverb, autostart, test. Usage: /speak [status|voice F5|lang en|reverb wet 0.3|test|…] or plain words ("make the reverb a bit lighter").\nargument-hint: "[on|off|status|voices|voice V|lang code|model …|chime …|reverb …|test|autostart on|off]"\ndisable-model-invocation: true\nallowed-tools: Bash(${CLI}:*)\n---\n\nThe user's request: $ARGUMENTS\n\n`,
+  // ~/.agents/skills is read by Copilot CLI and opencode too, so this one answers to /speak as well.
+  codex: `---\nname: speak\ndescription: claudespeak — configure the spoken summaries read when an agent's turn ends (${DOES}). Use only when the user invokes $speak or /speak.\n---\n\nThe user's request is what follows $speak or /speak in their message.\n\n`,
+  copilot: `---\nname: speak\ndescription: claudespeak — configure the spoken summaries read when a Copilot turn ends (${DOES}). Use only when the user invokes /speak.\n---\n\nThe user's request is what follows /speak in their message.\n\n`,
+  opencode: `---\ndescription: claudespeak — spoken summaries when a turn ends (${DOES}). /speak [status|voice F5|lang en|reverb wet 0.3|test|…] or plain words\n---\n\nThe user's request: $ARGUMENTS\n\n`,
+};
+
+/** The /speak skill or command (a SKILL.md in its own folder, or a single command file), pointing at this checkout's CLI. */
+function skill(file, flavour, on) {
+  const mine = fs.existsSync(file) && fs.readFileSync(file, "utf8").includes("claudespeak");
   if (!on) {
-    if (fs.existsSync(file) && fs.readFileSync(file, "utf8").includes("claudespeak")) fs.rmSync(path.dirname(file), { recursive: true, force: true });
+    if (mine) fs.rmSync(path.basename(file) === "SKILL.md" ? path.dirname(file) : file, { recursive: true, force: true });
     return;
   }
-  if (fs.existsSync(file) && !fs.readFileSync(file, "utf8").includes("claudespeak")) backup(file);
+  if (fs.existsSync(file) && !mine) backup(file);
   const body = fs.readFileSync(path.join(ROOT, "skill", "SKILL.md"), "utf8").replaceAll("{{CLI}}", CLI);
-  const head = flavour === "claude"
-    ? `---\nname: speak\ndescription: claudespeak — spoken summaries when a turn ends. On/off, voices, language, summary model, quality, speed, chimes, compressor, reverb, autostart, test. Usage: /speak [status|voice F5|lang en|reverb wet 0.3|test|…] or plain words ("make the reverb a bit lighter").\nargument-hint: "[on|off|status|voices|voice V|lang code|model …|chime …|reverb …|test|autostart on|off]"\ndisable-model-invocation: true\nallowed-tools: Bash(${CLI}:*)\n---\n\nThe user's request: $ARGUMENTS\n\n`
-    : `---\nname: speak\ndescription: claudespeak — configure the spoken summaries read when a Codex turn ends (on/off, voices, language, summary model, quality, speed, chimes, compressor, reverb, autostart, test). Use only when the user invokes $speak.\n---\n\nThe user's request is what follows $speak in their message.\n\n`;
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, head + body);
+  fs.writeFileSync(file, HEAD[flavour] + body);
 }
+const SKILL = {
+  claude: path.join(CLAUDE_DIR, "skills", "speak", "SKILL.md"),
+  codex: path.join(AGENTS_SKILLS, "speak", "SKILL.md"),
+  copilot: path.join(COPILOT_DIR, "skills", "speak", "SKILL.md"),
+  opencode: path.join(OPENCODE_DIR, "commands", "speak.md"),
+};
 
 export async function install(args) {
   const want = (k) => args.includes(`--${k}`);
   if (want("models-only")) { await download(); return console.log(`Voice model ready in ${MODELS}`); }
-  const claude = want("claude") || (!want("codex") && fs.existsSync(CLAUDE_DIR));
-  const codex = want("codex") || (!want("claude") && fs.existsSync(CODEX_DIR));
-  if (!claude && !codex) throw new Error("found neither Claude Code (~/.claude) nor Codex (~/.codex); pass --claude or --codex");
+  // The agents named with --claude / --codex / --copilot / --opencode, or else every one whose config folder exists.
+  const dirs = { claude: CLAUDE_DIR, codex: CODEX_DIR, copilot: COPILOT_DIR, opencode: OPENCODE_DIR };
+  const named = Object.keys(dirs).filter(want);
+  const [claude, codex, copilot, opencode] = Object.entries(dirs).map(([k, d]) => (named.length ? named.includes(k) : fs.existsSync(d)));
+  if (!claude && !codex && !copilot && !opencode) throw new Error("found none of Claude Code (~/.claude), Codex (~/.codex), Copilot CLI (~/.copilot) or opencode (~/.config/opencode); pass --claude, --codex, --copilot or --opencode");
   fs.mkdirSync(HOME, { recursive: true });
   if (!fs.existsSync(CONFIG)) saveConfig(loadConfig());   // the language starts as the OS's (else English)
   if (!want("no-models")) {
     if (!modelsReady()) console.log("Downloading Supertonic 3 (about 410 MB, once)…");
     await download();
   }
-  if (claude) { claudeHook(true); skill(path.join(CLAUDE_DIR, "skills"), "claude", true); }
-  if (codex) { codexNotify(true); skill(AGENTS_SKILLS, "codex", true); }
+  if (claude) { claudeHook(true); skill(SKILL.claude, "claude", true); }
+  if (codex) { codexNotify(true); skill(SKILL.codex, "codex", true); }
+  if (copilot) { copilotHook(true); skill(SKILL.copilot, "copilot", true); }
+  if (opencode) { opencodePlugin(true); skill(SKILL.opencode, "opencode", true); }
   if (want("autostart")) autostart(true);
   // A server from an older checkout would keep its code: stop it, the next recap starts this one.
   try { await fetch(BASE + "/quit", { signal: AbortSignal.timeout(1000) }); } catch {}
@@ -135,6 +175,8 @@ export async function install(args) {
     "claudespeak is set up:",
     claude && `  Claude Code: Stop hook + /speak (restart open sessions to pick them up)`,
     codex && `  Codex: notify + $speak skill (restart Codex)`,
+    copilot && `  Copilot CLI: agentStop hook + /speak skill (restart Copilot)`,
+    opencode && `  opencode: plugin + /speak command (restart opencode, or run \`opencode reload\`)`,
     `  Settings: ${CONFIG}  ·  language ${loadConfig().lang}`,
     `  Start at login: ${autostartStatus() ? "on" : "off (claudespeak autostart on)"}`,
     "Try it: claudespeak test",
@@ -143,9 +185,10 @@ export async function install(args) {
 
 export async function uninstall(args) {
   if (fs.existsSync(path.join(CLAUDE_DIR, "settings.json"))) claudeHook(false);
-  skill(path.join(CLAUDE_DIR, "skills"), "claude", false);
   if (fs.existsSync(path.join(CODEX_DIR, "config.toml"))) codexNotify(false);
-  skill(AGENTS_SKILLS, "codex", false);
+  copilotHook(false);
+  opencodePlugin(false);
+  for (const [flavour, file] of Object.entries(SKILL)) skill(file, flavour, false);
   try { if (autostartStatus()) autostart(false); } catch {}
   try { await fetch(BASE + "/quit", { signal: AbortSignal.timeout(1000) }); } catch {}
   if (args.includes("--purge")) fs.rmSync(HOME, { recursive: true, force: true });

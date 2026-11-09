@@ -1,14 +1,21 @@
 // claudespeak hook: runs when an agent's turn ends and hands a spoken summary to the server.
 //   Claude Code: a Stop hook, `node hook.mjs --agent claude` (the event JSON on stdin).
 //   Codex:       notify = ["node", "hook.mjs", "--agent", "codex"] (the event JSON appended as the last argument).
+//   Copilot CLI: an agentStop hook, `node hook.mjs --agent copilot --detach` (the event JSON on stdin; the
+//                message is read from the session's events.jsonl).
+//   opencode:    its plugin (opencode-plugin.js) pipes { cwd, last_assistant_message } to `--agent opencode`.
 // The summary (one or two sentences, in the project's language) is written by the same agent's CLI
-// (claude -p / codex exec) unless config says otherwise; without one, the message's first sentence is read.
+// (claude -p / codex exec / copilot -p / opencode run) unless config says otherwise; without one, the
+// message's first sentence is read.
 import fs from "node:fs";
-import { BASE, OFF, LANGS, MODELS_CLAUDE, loadConfig, projectOf, langOf } from "./config.mjs";
+import path from "node:path";
+import { spawn } from "node:child_process";
+import { BASE, OFF, LANGS, MODELS_CLAUDE, AGENTS, COPILOT_DIR, loadConfig, projectOf, langOf } from "./config.mjs";
 import { runCli, startServer } from "./platform.mjs";
-import { lastMessage, recap, sayable } from "./text.mjs";
+import { lastMessage, copilotMessage, recap, sayable } from "./text.mjs";
 
 const INPUT_CHARS = 8000;   // of the message, for the summariser
+const ARG_CHARS = 3000;     // copilot takes the prompt as an argument, and cmd.exe allows about 8000 characters
 
 // How a few foreign terms are written for each voice, to show the model the idea (it applies it to every term).
 const SOUND_EXAMPLES = {
@@ -21,19 +28,40 @@ const SOUND_EXAMPLES = {
   it: "GitHub → ghit-hab, Windows → uìndous, Claude → clod, JSON → géison, API → ei-pi-ai",
 };
 
-/** { text, cwd } from Claude Code's stdin or Codex's last argument; null when there's nothing to say. */
-function readEvent() {
-  const json = argv.findLast((a) => a.trim().startsWith("{"));
+/** The event JSON: Codex's last argument, the detached parent's copy, or stdin. */
+function rawEvent() {
+  try { return argv.findLast((a) => a.trim().startsWith("{")) ?? process.env.CLAUDESPEAK_EVENT ?? fs.readFileSync(0, "utf8"); } catch { return ""; }
+}
+
+/** { text, cwd } from the agent's event; null when there's nothing to say. */
+function readEvent(raw) {
   let d;
-  if (json) {
-    try { d = JSON.parse(json); } catch { return null; }
-    if (d.type && d.type !== "agent-turn-complete") return null;
-    const text = String(d["last-assistant-message"] ?? d.last_assistant_message ?? "").trim();
-    return text ? { text, cwd: d.cwd || process.cwd() } : null;
-  }
-  try { d = JSON.parse(fs.readFileSync(0, "utf8") || "{}"); } catch { return null; }
-  const text = String(d.last_assistant_message || lastMessage(d.transcript_path) || "").trim();
+  try { d = JSON.parse(raw || "{}"); } catch { return null; }
+  if (agent === "codex" && d.type && d.type !== "agent-turn-complete") return null;
+  let text = String(d["last-assistant-message"] ?? d.last_assistant_message ?? "").trim();
+  if (!text && agent === "copilot") {
+    const id = d.sessionId ?? d.session_id;
+    text = copilotMessage(d.transcriptPath || d.transcript_path || (id && path.join(COPILOT_DIR, "session-state", String(id), "events.jsonl")));
+  } else if (!text) text = lastMessage(d.transcript_path);
+  text = text.trim();
   return text ? { text, cwd: d.cwd || process.cwd() } : null;
+}
+
+/** Copilot CLI waits for its hooks: hand the event to a detached copy of this hook and return at once. */
+function detach(raw) {
+  const args = argv.filter((a) => a !== "--detach");
+  spawn(process.execPath, [process.argv[1], ...args], {
+    detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, CLAUDESPEAK_EVENT: raw },
+  }).unref();
+}
+
+/** The text `opencode run --format json` printed, and the sessions it made (deleted afterwards). */
+function opencodeOutput(jsonl) {
+  const events = jsonl.split("\n").map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  return {
+    text: events.filter((e) => e.type === "text").map((e) => e.part?.text || "").join("\n").trim(),
+    sessions: [...new Set(events.map((e) => e.sessionID).filter(Boolean))],
+  };
 }
 
 // Letters (or letter groups) a word of this language never has: one in the output means a word wasn't respelled.
@@ -78,6 +106,22 @@ async function summarize(text) {
   } else if (who === "codex") {
     const args = ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", ...(cfg.codexModel ? ["-m", cfg.codexModel] : []), "-"];
     out = await runCli("codex", args, prompt() + "\n\nMessage:\n" + msg, { env, timeout: 45_000 });
+  } else if (who === "copilot") {
+    // -p runs without asking: tools that need approval are refused, and shell and file writes are denied outright.
+    const args = ["-p", prompt() + "\n\nMessage:\n" + msg.slice(0, ARG_CHARS), "-s", "--no-ask-user",
+      "--deny-tool=shell", "--deny-tool=write", ...(cfg.copilotModel ? ["--model", cfg.copilotModel] : [])];
+    out = await runCli("copilot", args, "", { env, timeout: 45_000 });
+  } else if (who === "opencode") {
+    // opencode 2.x has a `summary` agent with every tool denied; 1.x's closest is the read-only `plan`.
+    const v2 = Number((await runCli("opencode", ["--version"], "", { env, timeout: 10_000 })).match(/(\d+)\./)?.[1]) >= 2;
+    const args = ["run", "--format", "json", "--agent", v2 ? "summary" : "plan", "--title", "claudespeak-summary",
+      ...(cfg.opencodeModel ? ["-m", cfg.opencodeModel] : [])];
+    const r = opencodeOutput(await runCli("opencode", args, prompt() + "\n\nMessage:\n" + msg, { env, timeout: 45_000 }));
+    out = r.text;
+    // A run that timed out never said its session: those are found by their title.
+    if (!r.sessions.length) r.sessions = (await runCli("opencode", ["session", "list"], "", { env, timeout: 10_000 }))
+      .split("\n").map((l) => l.split("\t")).filter((c) => c[1] === "claudespeak-summary").map((c) => c[0]);
+    for (const id of r.sessions) await runCli("opencode", ["session", "delete", id], "", { env, timeout: 10_000 });
   }
   // A two-line answer (TERMS / SAY): only the SAY line is read.
   const say = out.match(/SAY:\s*([\s\S]*)$/i);
@@ -114,9 +158,14 @@ async function chainCodexNotify() {
 if (process.env.CLAUDESPEAK_CHILD) process.exit(0);
 
 const argv = process.argv.slice(2);
-const agent = argv[argv.indexOf("--agent") + 1] === "codex" ? "codex" : "claude";
+const named = argv[argv.indexOf("--agent") + 1];
+const agent = AGENTS.includes(named) ? named : "claude";
 const cfg = loadConfig();
-const event = fs.existsSync(OFF) ? null : readEvent();
+if (fs.existsSync(OFF)) { await chainCodexNotify(); process.exit(0); }
+const raw = rawEvent();
+if (argv.includes("--detach") && !argv.includes("--print")) { detach(raw); process.exit(0); }
+if (agent === "copilot") await new Promise((r) => setTimeout(r, 300));   // let Copilot finish writing its log
+const event = readEvent(raw);
 if (!event) { await chainCodexNotify(); process.exit(0); }
 
 const project = projectOf(event.cwd);

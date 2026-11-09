@@ -10,8 +10,8 @@ shell. No request means `toggle`. Commands:
 | `rotation <V> <V> …` | voices new projects take in turn |
 | `lang <code> [project\|.]` / `lang reset [project\|.]` | summary language, global or per project: en tr de fr es it pt nl ru uk pl cs sk sl hr bg ro hu el fi et lv lt sv da ar hi id vi ja ko, `na` = the message's own language |
 | `model haiku\|sonnet\|opus` | Claude model that writes the summary |
-| `model codex-model <name>` | Codex model that writes the summary (empty = Codex's default) |
-| `model auto\|claude\|codex\|none` | who summarises: the agent that finished, always one of them, or nobody (first sentence) |
+| `model codex-model <name>` / `model copilot-model <name>` / `model opencode-model <provider/model>` | the Codex, Copilot CLI or opencode model that writes the summary (empty = that agent's default) |
+| `model auto\|claude\|codex\|copilot\|opencode\|none` | who summarises: the agent that finished, always one of them, or nobody (first sentence) |
 | `steps <1–20>` | quality (denoising steps; more = better, slower; default 6) |
 | `speed <0.7–1.6>` | speaking rate (default 1.05) |
 | `chime [on\|off]` / `chime volume <-40–-3>` / `chime reroll [project\|.]` | the faint per-project chime (rising before, falling after); volume is dB under the voice; reroll picks another |

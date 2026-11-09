@@ -31,6 +31,13 @@ export const LANGS = {
   vi: "Vietnamese", ja: "Japanese", ko: "Korean", na: "the message's own language",
 };
 export const MODELS_CLAUDE = ["haiku", "sonnet", "opus"];
+export const AGENTS = ["claude", "codex", "copilot", "opencode"];
+
+// Each agent's config folder; the environment overrides keep the smoke test away from the real ones.
+export const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+export const CODEX_DIR = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+export const COPILOT_DIR = process.env.COPILOT_HOME || path.join(os.homedir(), ".copilot");
+export const OPENCODE_DIR = process.env.OPENCODE_CONFIG_DIR || path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "opencode");
 
 /** The OS's display language (not its region format) if Supertonic speaks it, else English. */
 export function systemLang() {
@@ -51,9 +58,11 @@ export const DEFAULTS = {
   langs: {},                        // per-project language
   rotation: ["F5", "M2", "M5"],     // voices new projects take in turn
   projects: {},                     // project → voice
-  summarizer: "auto",               // auto (the agent that finished) | claude | codex | none (first sentence)
+  summarizer: "auto",               // auto (the agent that finished) | claude | codex | copilot | opencode | none (first sentence)
   claudeModel: "sonnet",
   codexModel: "",                   // "" = Codex's own default
+  copilotModel: "",                 // "" = Copilot CLI's own default
+  opencodeModel: "",                // provider/model; "" = opencode's own default
   steps: 6,                         // Supertonic denoising steps (quality)
   speed: 1.05,
   chimes: { enabled: true, volume: -14, seeds: {} },

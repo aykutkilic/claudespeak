@@ -10,8 +10,8 @@ model. It is plain Node ESM (`.mjs`, Node ≥ 20) with one runtime dependency (`
 build step, no bundler, no TypeScript and no linter.
 
 **Scope:** it is meant to work with any coding agent (Claude Code, Codex, GitHub Copilot, opencode, and so
-on) on macOS, Linux and Windows. Today only Claude Code and Codex are wired up. Every change must keep working
-on all three operating systems, and CI checks this.
+on) on macOS, Linux and Windows. Claude Code, Codex, Copilot CLI and opencode (1.x and 2.x) are wired up. Every
+change must keep working on all three operating systems, and CI checks this.
 
 ## Commands
 
@@ -34,8 +34,8 @@ node src/hook.mjs --agent codex --print '{"type":"agent-turn-complete","cwd":"."
 
 The smoke test points every path into a throwaway temporary home through environment variables, so it never
 touches the real setup. Keep it that way when adding tests. The variables are `HOME`/`USERPROFILE`/`APPDATA`,
-`CLAUDESPEAK_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `CLAUDESPEAK_PORT`. CI runs the smoke test with
-`SMOKE_TTS=1` on macOS, Windows and Linux.
+`CLAUDESPEAK_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `COPILOT_HOME`, `OPENCODE_CONFIG_DIR` and `CLAUDESPEAK_PORT`.
+CI runs the smoke test with `SMOKE_TTS=1` on macOS, Windows and Linux.
 
 A running server keeps the code it started with. After changing `src/server.mjs` (or anything it imports), run
 `node bin/claudespeak.mjs restart`. The next summary or `test` starts a fresh server.
@@ -45,8 +45,11 @@ A running server keeps the code it started with. After changing `src/server.mjs`
 The data flow runs from the agent to the hook, then the summariser, then the server, and finally the speaker:
 
 - **`src/hook.mjs`**: the entry point the agents call. Claude Code runs it as an async `Stop` hook and passes
-  the event JSON on stdin; Codex runs it as `notify` and appends the event JSON as the last argv. It shells out
-  to `claude -p` or `codex exec` to write the summary. If that fails, it falls back to `text.mjs` (`recap` +
+  the event JSON on stdin; Codex runs it as `notify` and appends the event JSON as the last argv. Copilot CLI
+  runs it as an `agentStop` hook with `--detach`: the hook passes the stdin event to a detached copy of itself
+  in `CLAUDESPEAK_EVENT`, because Copilot waits for its hooks. That copy reads the message from the session's
+  `events.jsonl` (`copilotMessage` in `text.mjs`). opencode's plugin pipes `{ cwd, last_assistant_message }` on
+  stdin. It shells out to `claude -p`, `codex exec`, `copilot -p` or `opencode run` to write the summary. If that fails, it falls back to `text.mjs` (`recap` +
   `sayable`). It then POSTs to the server, starting the server if it isn't up. The file is a script, and its
   main flow sits at the bottom, after every constant and function it uses. Keep that order.
   - Recursion guard: the summariser runs with `CLAUDESPEAK_CHILD=1`, and the hook exits at once when it sees
@@ -72,11 +75,17 @@ The data flow runs from the agent to the hook, then the summariser, then the ser
   - `pronounce()` applies the per-language lexicon on the server before synthesis.
   - The `off` file in the home folder is the on/off switch.
 - **`src/cli.mjs`**: every user command (one big `switch`), with value ranges in `RANGE`. The `/speak` and
-  `$speak` skills just run this CLI.
+  `$speak` skills and the opencode `/speak` command just run this CLI.
 - **`src/install.mjs`**: downloads the model, pinned to a Hugging Face commit with expected file sizes, and wires
   up the agents.
   - Claude: a `Stop` hook entry in `settings.json`. Codex: a top-level `notify` line in `config.toml`, found and
-    edited with a small TOML scanner rather than a parser.
+    edited with a small TOML scanner rather than a parser. Copilot CLI: a hooks file of its own,
+    `~/.copilot/hooks/claudespeak.json`. opencode: `plugins/claudespeak.js`, copied from the template
+    `src/opencode-plugin.js` with the Node and hook paths filled in.
+  - The opencode plugin runs inside opencode (Bun), not Node. Its default export serves both loaders: 2.x calls
+    `setup(ctx)` and reads `ctx.event.subscribe()` (an undocumented API, found by probing 2.1.3: the turn ends at
+    `session.execution.succeeded`, and the text comes from `ctx.session.context`). 1.x calls `server()` and gets
+    `session.idle`.
   - The entries it adds are tagged with the `--claudespeak` marker so they can be found and removed again.
   - A `notify` command Codex already had is saved as `codexNotifyChain`. The hook runs it after itself, and
     uninstall restores it.
@@ -87,6 +96,7 @@ The data flow runs from the agent to the hook, then the summariser, then the ser
   - Audio players: `afplay`; PowerShell `SoundPlayer`; `pw-play`, `paplay`, `aplay` or `ffplay`. The OS's own
     voice is the fallback when Supertonic fails to load.
   - `runCli`: on Windows the agent CLIs are `.cmd` shims, so it goes through the shell with manual quoting.
+    Line breaks in arguments become spaces there, because cmd.exe ends a command at a line break.
   - Autostart: a launchd LaunchAgent, a Startup-folder `.vbs` script, or a `systemd --user` unit.
 - **`vendor/supertonic/helper.js`**: Supertone's MIT-licensed inference helper, vendored. Treat it as
   third-party code. The model weights are not in the repository.
@@ -96,10 +106,12 @@ Installed hooks and skills point at absolute paths in this checkout, so moving t
 
 ## Adding an agent
 
-An agent is supported once these pieces exist. Use the `claude` and `codex` paths in each file as the
-template:
+An agent is supported once these pieces exist. Use the `claude`, `codex`, `copilot` and `opencode` paths in
+each file as the template. Add the agent's name to `AGENTS` and its config folder to `config.mjs`:
 
-1. **Turn-end trigger:** the agent runs `node src/hook.mjs --agent <name> --claudespeak` when a turn ends.
+1. **Turn-end trigger:** the agent runs `node src/hook.mjs --agent <name> --claudespeak` when a turn ends (or a
+   plugin of the agent's pipes the message to it, as opencode's does). Pass `--detach` if the agent waits for
+   the hook.
    `readEvent()` in `hook.mjs` must parse that agent's event format into `{ text, cwd }`.
 2. **Summariser:** add a branch in `summarize()` that runs the agent's own CLI non-interactively, with no
    tools, read-only and no saved session, with `CLAUDESPEAK_CHILD=1` in its environment. `model auto` picks

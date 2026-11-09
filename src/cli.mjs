@@ -1,6 +1,6 @@
-// claudespeak CLI: what /speak (Claude Code) and $speak (Codex) run, plus install / uninstall / doctor.
+// claudespeak CLI: what /speak (Claude Code, Copilot CLI, opencode) and $speak (Codex) run, plus install / uninstall / doctor.
 import fs from "node:fs";
-import { BASE, OFF, HOME, CONFIG, MODELS, VOICES, LANGS, MODELS_CLAUDE, DEFAULTS, loadConfig, saveConfig, projectOf, voiceOf, langOf, pronounce } from "./config.mjs";
+import { BASE, OFF, HOME, CONFIG, MODELS, VOICES, LANGS, MODELS_CLAUDE, AGENTS, DEFAULTS, loadConfig, saveConfig, projectOf, voiceOf, langOf, pronounce } from "./config.mjs";
 import { autostart, autostartStatus, playerName, has } from "./platform.mjs";
 import { install, uninstall, modelsReady } from "./install.mjs";
 
@@ -49,9 +49,11 @@ export async function main(argv) {
       if (!a.length) return say(`Summaries by: ${who(cfg)}`);
       const m = a[0].toLowerCase();
       if (MODELS_CLAUDE.includes(m)) cfg.claudeModel = m;
-      else if (["auto", "claude", "codex", "none"].includes(m)) cfg.summarizer = m;
+      else if (["auto", ...AGENTS, "none"].includes(m)) cfg.summarizer = m;
       else if (m === "codex-model") cfg.codexModel = a[1] || "";
-      else throw new Error("model haiku|sonnet|opus (Claude), codex-model <name> (Codex), or auto|claude|codex|none (who summarises)");
+      else if (m === "copilot-model") cfg.copilotModel = a[1] || "";
+      else if (m === "opencode-model") cfg.opencodeModel = a[1] || "";
+      else throw new Error("model haiku|sonnet|opus (Claude), codex-model|copilot-model|opencode-model <name>, or auto|claude|codex|copilot|opencode|none (who summarises)");
       save(); return say(`Summaries by: ${who(cfg)}`);
     }
     case "pronounce": case "unpronounce": case "pronunciations": {
@@ -143,15 +145,16 @@ const SAMPLES = {
   ko: (p) => `${p}의 목소리입니다. 설정을 들어 볼 수 있는 짧은 예시입니다.`,
 };
 
-const HELP = `claudespeak — spoken summaries for Claude Code and Codex
-  install [--claude] [--codex] [--autostart]   set up (downloads the voice model, ~410 MB, once)
+const HELP = `claudespeak — spoken summaries for Claude Code, Codex, Copilot CLI and opencode
+  install [--claude] [--codex] [--copilot] [--opencode] [--autostart]   set up (downloads the voice model, ~410 MB, once)
   install --models-only                        just download the model
   uninstall [--purge]                             remove the hook, skill and autostart (--purge: models and settings too)
   status | doctor | voices | test [text] | skip | stop | restart
   on | off | toggle
   voice <F1–F5|M1–M5> [project|.]    rotation <V> <V> …
   lang <code> [project|.] | lang reset [project|.] | lang system
-  model haiku|sonnet|opus | auto|claude|codex|none | codex-model <name>
+  model haiku|sonnet|opus | auto|claude|codex|copilot|opencode|none
+  model codex-model <name> | copilot-model <name> | opencode-model <provider/model>
   steps <1–20>   speed <0.7–1.6>   peak <dB>
   compressor [on|off] [threshold dB] [ratio N] [attack s] [release s] [makeup dB]
   reverb [on|off] [room 0–1] [damp 0–1] [wet 0–1] [tail s]
@@ -162,8 +165,9 @@ const HELP = `claudespeak — spoken summaries for Claude Code and Codex
 function say(s) { console.log(s); }
 function who(c) {
   if (c.summarizer === "none") return "nobody (the first sentence is read)";
-  const cl = `Claude ${c.claudeModel}`, cx = `Codex ${c.codexModel || "(default model)"}`;
-  return c.summarizer === "claude" ? cl : c.summarizer === "codex" ? cx : `the agent that finished (${cl} / ${cx})`;
+  const d = (m) => m || "(default model)";
+  const by = { claude: `Claude ${c.claudeModel}`, codex: `Codex ${d(c.codexModel)}`, copilot: `Copilot ${d(c.copilotModel)}`, opencode: `opencode ${d(c.opencodeModel)}` };
+  return by[c.summarizer] || `the agent that finished (${Object.values(by).join(" / ")})`;
 }
 function langLine(c, p) {
   const own = Object.entries(c.langs);
@@ -199,8 +203,8 @@ async function doctor(c) {
     `${ok(modelsReady())}voice model in ${MODELS}`,
     `${ok(fs.existsSync(CONFIG))}config ${CONFIG}`,
     `${ok(playerName() !== "none")}audio player: ${playerName()}`,
-    `${ok(has("claude"))}claude CLI${has("claude") ? "" : " (needed for Claude summaries)"}`,
-    `${ok(has("codex"))}codex CLI${has("codex") ? "" : " (needed for Codex summaries)"}`,
+    ...[["claude", "Claude"], ["codex", "Codex"], ["copilot", "Copilot"], ["opencode", "opencode"]]
+      .map(([cmd, name]) => `${ok(has(cmd))}${cmd} CLI${has(cmd) ? "" : ` (needed for ${name} summaries)`}`),
     `${ok(!!s)}server ${s ? `pid ${s.pid}, ${s.engine}` : "not running"}`,
     `${ok(!fs.existsSync(OFF))}voice ${fs.existsSync(OFF) ? "off (claudespeak on)" : "on"}`,
     `${ok(autostartStatus())}start at login`,

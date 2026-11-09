@@ -1,5 +1,5 @@
 // What differs between macOS, Windows and Linux: playing a WAV, a fallback system voice, running a
-// CLI (claude / codex are .cmd shims on Windows), and starting the server at login.
+// CLI (the agent CLIs are .cmd shims on Windows), and starting the server at login.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -37,8 +37,9 @@ export function systemSpeech(text) {
 /** Runs a CLI with text on stdin; resolves to its stdout, or "" on failure or timeout. */
 export function runCli(cmd, args, input, { env = {}, timeout = 30_000 } = {}) {
   return new Promise((resolve) => {
-    // On Windows the CLIs are .cmd shims, so they go through the shell: quote each argument.
-    const q = (a) => (/^[\w@%+=:,./\\-]+$/.test(a) ? a : `"${a.replace(/"/g, '""')}"`);
+    // On Windows the CLIs are .cmd shims, so they go through the shell: quote each argument. cmd.exe ends
+    // the command at a line break, even inside quotes, so line breaks in an argument become spaces.
+    const q = (a) => (/^[\w@%+=:,./\\-]+$/.test(a) ? a : `"${a.replace(/\r?\n/g, " ").replace(/"/g, '""')}"`);
     const p = WIN ? spawn([cmd, ...args].map(q).join(" "), { shell: true, env: { ...process.env, ...env }, windowsHide: true })
       : spawn(cmd, args, { env: { ...process.env, ...env } });
     let out = "";

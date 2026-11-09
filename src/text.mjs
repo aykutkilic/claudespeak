@@ -28,6 +28,21 @@ export function lastMessage(file) {
   return parts.join("\n\n");
 }
 
+/** The last assistant message of a Copilot CLI session log (events.jsonl: `assistant.message`, text in data.content). */
+export function copilotMessage(file) {
+  if (!file || !fs.existsSync(file)) return "";
+  const lines = fs.readFileSync(file, "utf8").trimEnd().split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let d; try { d = JSON.parse(lines[i]); } catch { continue; }
+    if (/^user\./.test(d.type)) return "";   // the turn has no answer yet
+    if (d.type !== "assistant.message" || d.data?.parentToolCallId) continue;   // a subagent's message
+    const c = d.data?.content;
+    const text = typeof c === "string" ? c : Array.isArray(c) ? c.filter((x) => x?.type === "text").map((x) => x.text).join("\n\n") : "";
+    if (text.trim()) return text;
+  }
+  return "";
+}
+
 /** The spoken part: the first prose paragraph's first sentence, asides in brackets left out. */
 export function recap(s) {
   const paras = s.replace(/```[\s\S]*?```/g, "\n\n").split(/\n\s*\n/).map((p) => p.trim())
