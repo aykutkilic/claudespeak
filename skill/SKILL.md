@@ -3,6 +3,7 @@ shell. No request means `toggle`. Commands:
 
 | Command | Does |
 |---|---|
+| `setup` | install or update the shared voice runtime and local model |
 | `toggle` / `on` / `off` | spoken summaries on/off |
 | `status` | everything: on/off, server, this project's voice and language, all projects, model, quality, fx |
 | `voices` | the 10 voices: F1–F5 (female), M1–M5 (male), with what each sounds like |

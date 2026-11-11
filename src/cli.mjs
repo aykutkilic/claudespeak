@@ -19,6 +19,7 @@ export async function main(argv) {
   const target = (p) => (!p || p === "." ? project : p);
 
   switch (cmd.toLowerCase()) {
+    case "setup": return (await import("./bootstrap.mjs")).setup(a);
     case "install": return install(a);
     case "uninstall": return uninstall(a);
     case "doctor": return doctor(cfg);
@@ -146,6 +147,7 @@ const SAMPLES = {
 };
 
 const HELP = `claudespeak — spoken summaries for Claude Code, Codex, Copilot CLI and opencode
+  setup [--claude|--codex|--copilot|--opencode]     install a durable shared runtime and configure agents
   install [--claude] [--codex] [--copilot] [--opencode] [--autostart]   set up (downloads the voice model, ~410 MB, once)
   install --models-only                        just download the model
   uninstall [--purge]                             remove the hook, skill and autostart (--purge: models and settings too)

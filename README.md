@@ -28,8 +28,59 @@ Runs on macOS, Windows and Linux.
 
 ## Install
 
-You need [Node.js](https://nodejs.org) 20 or newer, `git`, about 450 MB of disk space, and at least one of Claude Code,
-the Codex CLI, GitHub Copilot CLI or opencode (1.x or 2.x).
+You need Node.js 20 or newer, `git`, and a supported coding agent. Allow space for the approximately 410 MB
+voice model plus the platform's inference runtime.
+Choose the plugin for your agent, or use the one-command installer.
+
+### Claude Code plugin
+
+In Claude Code:
+
+```text
+/plugin install claudespeak --marketplace aykutkilic/claudespeak
+/claudespeak:setup
+```
+
+The plugin supplies the turn-end hook and `/claudespeak:speak` for settings. Older Claude Code versions can
+use `/plugin marketplace add aykutkilic/claudespeak`, then `/plugin install claudespeak@claudespeak`.
+
+### GitHub Copilot CLI plugin
+
+```sh
+copilot plugin install aykutkilic/claudespeak
+```
+
+Restart Copilot, then ask it to run the claudespeak **setup** skill. Use its **speak** skill to configure speech.
+The plugin supplies the `agentStop` hook; no hand-edited configuration is needed.
+
+### Codex desktop plugin
+
+```sh
+codex plugin marketplace add aykutkilic/claudespeak
+```
+
+Open the Plugins Directory in the desktop app, select the **claudespeak** marketplace, and install the plugin.
+Review its hooks when Codex prompts, then ask it to run the claudespeak **setup** skill.
+OpenAI currently documents lifecycle-hook plugins for manual desktop installation; for Codex CLI, use the
+installer below, which configures `notify` and `$speak`.
+([OpenAI plugin documentation](https://developers.openai.com/plugins/build/plugins#bundled-mcp-servers-and-lifecycle-hooks))
+
+### One command for all agents
+
+```sh
+npx --yes github:aykutkilic/claudespeak setup
+```
+
+This detects Claude Code, Codex, Copilot CLI and opencode. To select one, append `--codex`, `--claude`,
+`--copilot` or `--opencode`. No manual clone or global npm installation is needed. The runtime is copied into
+`~/.claudespeak/runtime/`, so clearing the npm or plugin cache does not break installed hooks.
+
+Setup downloads the approximately 410 MB voice model once. Plugins share this model and runtime across agents.
+Installing a plugin alone does not download the model: run its setup skill once, and again after updating the
+plugin to update the runtime. Existing direct hooks take precedence over plugin hooks to prevent duplicate speech.
+Remove native plugins through their agent's plugin manager; the shared runtime stays available to other agents.
+
+### Development checkout
 
 ```sh
 git clone https://github.com/aykutkilic/claudespeak
@@ -58,7 +109,13 @@ afterwards (for opencode 2.x, `opencode reload`), then try it:
 node bin/claudespeak.mjs test
 ```
 
-Keep the clone where it is, because the hook runs from it. To update, run `git pull && npm install && npm run setup`.
+For development-checkout installs, keep the clone where it is: its hooks run from it. Update with
+`git pull && npm install && npm run setup`. For managed installs, rerun the one-command installer or the plugin's
+setup skill. User settings and the downloaded model are preserved.
+
+Run `npm test` for isolated integration and streaming checks; `SMOKE_TTS=1 npm test` also exercises the real
+model. `npm run test:install` verifies the packaged npx installer in a temporary home, including deleting its
+cache and restoring existing settings on uninstall. It needs registry access, but does not download voice models.
 
 ### Per OS
 
@@ -81,6 +138,7 @@ From a terminal, run `node bin/claudespeak.mjs …`, or `npm link` once and then
 
 | Command | Does |
 |---|---|
+| `setup [--claude\|--codex\|--copilot\|--opencode]` | install/update the durable runtime and detected agents |
 | `status`, `doctor` | show all settings / check the setup |
 | `on`, `off`, *(nothing)* | turn speech on, off, or toggle it |
 | `voices` | list the 10 voices, F1–F5 and M1–M5, with what each sounds like |
@@ -151,3 +209,6 @@ node bin/claudespeak.mjs uninstall --purge  # …and delete ~/.claudespeak (mode
 
 claudespeak is an independent project and is not affiliated with Anthropic, OpenAI, GitHub, the opencode project
 or Supertone.
+
+Plugin formats follow the [Claude Code manifest reference](https://code.claude.com/docs/en/plugins-reference)
+and [Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference).

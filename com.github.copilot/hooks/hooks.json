@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "node \"${COPILOT_PLUGIN_ROOT}/scripts/plugin.mjs\" hook copilot",
+        "powershell": "node \"${env:COPILOT_PLUGIN_ROOT}/scripts/plugin.mjs\" hook copilot",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}

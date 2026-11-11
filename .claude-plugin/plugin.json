@@ -1,0 +1,22 @@
+{
+  "name": "claudespeak",
+  "version": "0.2.0",
+  "description": "Spoken summaries for Claude Code, Codex, Copilot CLI and opencode: a local voice (Supertonic 3) reads one or two sentences when an agent finishes, one voice and chime per project, one speaker at a time.",
+  "author": {
+    "name": "Aykut Kilic"
+  },
+  "homepage": "https://github.com/aykutkilic/claudespeak#readme",
+  "repository": "https://github.com/aykutkilic/claudespeak",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "copilot",
+    "opencode",
+    "tts",
+    "text-to-speech",
+    "supertonic",
+    "hooks",
+    "voice"
+  ]
+}

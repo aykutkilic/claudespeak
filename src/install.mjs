@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { HOME, MODELS, CONFIG, ROOT, BASE, CLAUDE_DIR, CODEX_DIR, COPILOT_DIR, OPENCODE_DIR, loadConfig, saveConfig } from "./config.mjs";
 import { autostart, autostartStatus } from "./platform.mjs";
+import { createRequire } from "node:module";
 
 const REPO = "https://huggingface.co/supertone-oss-archive/supertonic-3/resolve/aafc6e32416a594460b32413efc49d7fe4ce6d46";
 const FILES = {
@@ -153,6 +154,11 @@ const SKILL = {
 export async function install(args) {
   const want = (k) => args.includes(`--${k}`);
   if (want("models-only")) { await download(); return console.log(`Voice model ready in ${MODELS}`); }
+  // npx/global/plugin downloads are intentionally small. The native dependency belongs to the
+  // managed runtime, installed explicitly with CUDA downloads disabled on every platform.
+  let backend = true;
+  try { createRequire(import.meta.url).resolve("onnxruntime-node"); } catch { backend = false; }
+  if (!backend) return (await import("./bootstrap.mjs")).setup(args);
   // The agents named with --claude / --codex / --copilot / --opencode, or else every one whose config folder exists.
   const dirs = { claude: CLAUDE_DIR, codex: CODEX_DIR, copilot: COPILOT_DIR, opencode: OPENCODE_DIR };
   const named = Object.keys(dirs).filter(want);

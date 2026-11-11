@@ -34,14 +34,27 @@ export function systemSpeech(text) {
   return null;
 }
 
+function cliProcess(cmd, args, { env = {}, stdio } = {}) {
+  // On Windows the CLIs are .cmd shims, so they go through the shell: quote each argument. cmd.exe ends
+  // the command at a line break, even inside quotes, so line breaks in an argument become spaces.
+  const q = (a) => (/^[\w@%+=:,./\\-]+$/.test(a) ? a : `"${a.replace(/\r?\n/g, " ").replace(/"/g, '""')}"`);
+  return WIN && !/\.exe$/i.test(cmd) ? spawn([cmd, ...args].map(q).join(" "), { shell: true, stdio, env: { ...process.env, ...env }, windowsHide: true })
+    : spawn(cmd, args, { stdio, env: { ...process.env, ...env }, windowsHide: true });
+}
+
+/** Runs an interactive setup command, preserving its output and rejecting failures. */
+export function runCommand(cmd, args, env = {}) {
+  return new Promise((resolve, reject) => {
+    const child = cliProcess(cmd, args, { env, stdio: "inherit" });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => code === 0 ? resolve() : reject(new Error(`${cmd} failed (${signal || code})`)));
+  });
+}
+
 /** Runs a CLI with text on stdin; resolves to its stdout, or "" on failure or timeout. */
 export function runCli(cmd, args, input, { env = {}, timeout = 30_000 } = {}) {
   return new Promise((resolve) => {
-    // On Windows the CLIs are .cmd shims, so they go through the shell: quote each argument. cmd.exe ends
-    // the command at a line break, even inside quotes, so line breaks in an argument become spaces.
-    const q = (a) => (/^[\w@%+=:,./\\-]+$/.test(a) ? a : `"${a.replace(/\r?\n/g, " ").replace(/"/g, '""')}"`);
-    const p = WIN ? spawn([cmd, ...args].map(q).join(" "), { shell: true, env: { ...process.env, ...env }, windowsHide: true })
-      : spawn(cmd, args, { env: { ...process.env, ...env } });
+    const p = cliProcess(cmd, args, { env });
     let out = "";
     const timer = setTimeout(() => { p.kill(); resolve(""); }, timeout);
     p.stdout.on("data", (c) => (out += c));

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 claudespeak reads a one- or two-sentence spoken summary aloud when a coding agent's turn ends, and gives that
 agent a `/speak` command (`$speak` in Codex) to configure it. It uses Supertonic 3, a local ONNX text-to-speech
-model. It is plain Node ESM (`.mjs`, Node ≥ 20) with one runtime dependency (`onnxruntime-node`). There is no
+model. It is plain Node ESM (`.mjs`, Node ≥ 20) with one inference dependency (`onnxruntime-node`). There is no
 build step, no bundler, no TypeScript and no linter.
 
 **Scope:** it is meant to work with any coding agent (Claude Code, Codex, GitHub Copilot, opencode, and so
@@ -17,8 +17,10 @@ change must keep working on all three operating systems, and CI checks this.
 
 ```sh
 npm install                                   # .npmrc skips onnxruntime's CUDA download
-npm test                                      # test/smoke.mjs, the only test; it has no per-test runner
-SMOKE_TTS=1 npm test                          # also synthesises a sentence (needs the models downloaded)
+npm test                                      # smoke, speech scheduling and distribution checks; no per-test runner
+node scripts/build-plugins.mjs                # regenerate committed plugin manifests and skills
+npm run test:install                         # real packaged npx setup/uninstall in a temporary home (network)
+SMOKE_TTS=1 npm test                          # also checks real synthesis and progressive output (needs models)
 node bin/claudespeak.mjs install --models-only   # download the ~410 MB model to ~/.claudespeak/models
 node bin/claudespeak.mjs <cmd>                # the CLI (status, doctor, test, restart, …; `help` lists all)
 ```
@@ -35,7 +37,7 @@ node src/hook.mjs --agent codex --print '{"type":"agent-turn-complete","cwd":"."
 The smoke test points every path into a throwaway temporary home through environment variables, so it never
 touches the real setup. Keep it that way when adding tests. The variables are `HOME`/`USERPROFILE`/`APPDATA`,
 `CLAUDESPEAK_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `COPILOT_HOME`, `OPENCODE_CONFIG_DIR` and `CLAUDESPEAK_PORT`.
-CI runs the smoke test with `SMOKE_TTS=1` on macOS, Windows and Linux.
+CI runs the smoke test with `SMOKE_TTS=1` and the packaged installer check on macOS, Windows and Linux.
 
 A running server keeps the code it started with. After changing `src/server.mjs` (or anything it imports), run
 `node bin/claudespeak.mjs restart`. The next summary or `test` starts a fresh server.
@@ -59,14 +61,23 @@ The data flow runs from the agent to the hook, then the summariser, then the ser
     foreign terms in the target language's letters.
 - **`src/server.mjs`**: an HTTP server on `127.0.0.1:7841` with `/say`, `/skip`, `/stop`, `/quit`, `/status`
   and `/health`.
-  - It keeps one queue and synthesises the next item while the current one plays. Items older than 3 minutes
-    are dropped. If the port is already taken, it exits quietly, so duplicate starts are harmless.
-  - It runs audio through a pure-JS DSP chain: compressor, then per-project chimes (from a seeded hash of the
-    project name), then a Freeverb-style reverb, then a peak ceiling. It writes a temporary WAV and hands it to
-    the platform's player.
+  - It snapshots voice, language and settings per recap and shares one engine-loading promise. It writes
+    each synthesized phrase to a temporary WAV and hands it to the platform's player.
+  - If the port is already taken, it exits quietly, so duplicate starts are harmless.
   - `play.lock` in `CLAUDESPEAK_HOME` holds the server and player PIDs. It keeps playback to one voice at a
     time across processes, including old servers from other checkouts.
   - `quit()` sends itself `SIGKILL`, because a normal exit hangs on onnxruntime's threads.
+- **`src/speech.mjs`**: the progressive synthesis/playback queue. A short first phrase minimizes startup
+  latency; subsequent budgets use measured inference time and playable audio duration. Prefer sentence/clause
+  boundaries, then word boundaries, and cap chunks at 300 characters (120 for Japanese/Korean).
+  - Keep inference serial, and prefetch only one chunk. Hold the machine-wide playback lock across a recap.
+  - Skip/stop abort playback and discard remaining chunks, including late inference results and queued WAVs.
+    ONNX inference itself cannot be interrupted. Items older than 3 minutes are dropped before playback.
+  - `test/speech.mjs` uses gated promises to check overlap, bounded buffering, FIFO, cancellation and cleanup
+    without a model or audio device. `test/smoke.mjs` also checks real progressive inference with `SMOKE_TTS=1`.
+- **`src/audio.mjs`**: stateful pure-JS compressor, per-project chimes (from a seeded hash of the project
+  name), Freeverb-style reverb and peak ceiling, plus WAV encoding. Preserve compressor/reverb state across
+  chunks; add an intro only to the first chunk, and the outro/reverb tail only to the last.
 - **`src/config.mjs`**: shared paths, defaults and `~/.claudespeak/config.json`.
   - `loadConfig()` deep-merges the file over `DEFAULTS`. Add new nested settings to that merge too.
   - The server re-reads the file when its mtime changes, so CLI edits apply without a restart. The server also
@@ -98,6 +109,18 @@ The data flow runs from the agent to the hook, then the summariser, then the ser
   - `runCli`: on Windows the agent CLIs are `.cmd` shims, so it goes through the shell with manual quoting.
     Line breaks in arguments become spaces there, because cmd.exe ends a command at a line break.
   - Autostart: a launchd LaunchAgent, a Startup-folder `.vbs` script, or a `systemd --user` unit.
+- **`src/bootstrap.mjs`**: durable installation for npx and native plugins. Runtime inputs are hashed and
+  copied by npm (`--install-links`) into a staged prefix under `~/.claudespeak/runtime/`. Select the new
+  runtime only after its package and inference dependency exist. Failed updates leave the previous selection.
+  - ONNX Runtime is a dev dependency for checkout development; bootstrap explicitly installs it alongside
+    the managed package with `ONNXRUNTIME_NODE_INSTALL=skip`. The initial npx/plugin download stays small.
+  - Native hooks call `scripts/plugin.mjs`, which dispatches to the managed runtime. Hooks never install
+    dependencies or download models. Explicit setup handles both. Direct hooks win over native hooks.
+  - `scripts/build-plugins.mjs` generates manifests, marketplaces and plugin skills from `package.json` and
+    `skill/SKILL.md`. Commit generated files; `--check` detects drift. Claude uses `.claude-plugin/`, Codex uses
+    the portable root manifest's `com.openai` extension, and Copilot uses `com.github.copilot/hooks/`.
+  - Codex lifecycle-hook plugins currently target manual desktop installs; CLI setup retains `notify`.
+    `test/distribution.mjs` checks installation identity, failure recovery, cache independence and packaging.
 - **`vendor/supertonic/helper.js`**: Supertone's MIT-licensed inference helper, vendored. Treat it as
   third-party code. The model weights are not in the repository.
 

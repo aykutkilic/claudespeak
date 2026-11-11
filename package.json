@@ -1,14 +1,19 @@
 {
   "name": "claudespeak",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Spoken summaries for Claude Code, Codex, Copilot CLI and opencode: a local voice (Supertonic 3) reads one or two sentences when an agent finishes, one voice and chime per project, one speaker at a time.",
   "type": "module",
   "bin": {
     "claudespeak": "bin/claudespeak.mjs"
   },
+  "files": [
+    "bin/", "src/", "vendor/", "skill/", "skills/", "scripts/", "hooks/",
+    "com.github.copilot/", ".claude-plugin/", ".agents/plugins/", "plugin.json", "HISTORY.md"
+  ],
   "scripts": {
     "setup": "node bin/claudespeak.mjs install",
-    "test": "node test/smoke.mjs && node test/speech.mjs"
+    "test": "node test/smoke.mjs && node test/speech.mjs && node test/distribution.mjs",
+    "test:install": "node test/install-package.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -18,7 +23,7 @@
     "win32",
     "linux"
   ],
-  "dependencies": {
+  "devDependencies": {
     "onnxruntime-node": "^1.31.1"
   },
   "license": "MIT",

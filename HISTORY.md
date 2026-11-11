@@ -24,3 +24,30 @@
   generation; inference time varied substantially between runs. Native playback confirmed that a future
   WAV was ready before the first player finished and that generated WAVs were removed. macOS creates other
   temporary metadata, so cleanup checks must target the application's WAVs rather than the entire directory.
+- Added native Claude Code, Codex desktop and Copilot CLI plugin metadata, setup/speak skills, and a
+  one-command npx setup route for all supported agents. Consulted the official plugin documentation:
+  OpenAI limits documented hook-plugin installation to manual desktop installs, so Codex CLI keeps `notify`.
+- Added a staged, content-addressed shared runtime under `~/.claudespeak/runtime/`. This avoids hooks pointing
+  into disposable npm/plugin caches and keeps a failed update from replacing a working installation. Native
+  dependencies install only during explicit setup, with CUDA downloads disabled; models remain shared.
+  Direct hooks take precedence over native hooks to avoid duplicate speech during migration.
+- Generate plugin metadata and skills from package metadata and the existing command template, with a drift
+  check in the test suite. Sandbox protections required scoped escalation for project `.agents/` marketplace
+  metadata and the native validators; registry-free lockfile updates worked with npm's offline mode.
+- Passed the real tarball/npx setup check for all four direct integrations, removed its npm cache, and
+  verified the retained runtime plus uninstall restoration of an existing Codex notifier. The initial
+  tarball was approximately 47 KB (30 files); native dependencies and models are installed separately.
+  Added `npm run test:install` as a repeatable opt-in network check and a CI gate on all three platforms.
+- Claude Code 2.1.322 accepted the plugin/marketplace manifest. Copilot CLI 1.0.109 installed the packaged
+  plugin and discovered both skills in an isolated profile. Authenticated end-of-turn behavior in Copilot
+  and Codex desktop remains a client-session check; installation validation alone does not establish it.
+- Packaging checks can write npm cache data even in dry-run mode. Keep them outside the default offline
+  suite. A test fixture initially overwrote the config's saved notifier; preserving that config while
+  changing summary settings fixed the fixture and confirmed uninstall restoration.
+- The packaged runtime also loaded its native inference helper after the npm cache was removed. Reloaded
+  the local voice server after verification so the streaming code is active. Copilot's current CLI is a
+  compiled distribution; a search confined to JavaScript files did not establish its hook environment
+  variables and must not be interpreted as proof of missing support.
+- Release v0.2.0 packages progressive speech and native plugins with a downloadable installer and
+  versioned GitHub installation. Release checks cover the real model, package cache independence,
+  configuration restoration, and the generated plugin manifests.
