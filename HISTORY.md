@@ -51,3 +51,6 @@
 - Release v0.2.0 packages progressive speech and native plugins with a downloadable installer and
   versioned GitHub installation. Release checks cover the real model, package cache independence,
   configuration restoration, and the generated plugin manifests.
+- Release CI passed synthesis on all platforms, but Windows converted generated files to CRLF and failed
+  the exact-content drift check. Added `.gitattributes` to keep text checkouts at LF across platforms,
+  preserving deterministic generated manifests and runtime identities without weakening the drift check.

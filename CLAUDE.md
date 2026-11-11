@@ -154,6 +154,8 @@ exception is `systemLang()` in `config.mjs`.
 
 ## Conventions
 
+- `.gitattributes` keeps repository text at LF on every OS, so generated plugin drift checks and runtime
+  content hashes do not depend on Windows checkout settings.
 - Match the existing style. Code is dense, with short one-line helpers, `/** … */` comments on what a function
   returns or does, and no new dependencies.
 - The README documents every user-facing command and setting. When you add or change a command, update the
