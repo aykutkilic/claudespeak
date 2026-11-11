@@ -185,7 +185,7 @@ export async function install(args) {
     opencode && `  opencode: plugin + /speak command (restart opencode, or run \`opencode reload\`)`,
     `  Settings: ${CONFIG}  ·  language ${loadConfig().lang}`,
     `  Start at login: ${autostartStatus() ? "on" : "off (claudespeak autostart on)"}`,
-    "Try it: claudespeak test",
+    "Try it in your agent: /speak test (Codex: $speak test)",
   ].filter(Boolean).join("\n"));
 }
 

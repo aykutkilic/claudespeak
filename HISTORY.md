@@ -54,3 +54,5 @@
 - Release CI passed synthesis on all platforms, but Windows converted generated files to CRLF and failed
   the exact-content drift check. Added `.gitattributes` to keep text checkouts at LF across platforms,
   preserving deterministic generated manifests and runtime identities without weakening the drift check.
+- Documented first-use test, language, status and mute commands. Managed setup now points people to the
+  installed agent skill rather than assuming a global `claudespeak` shell command exists.

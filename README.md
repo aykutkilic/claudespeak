@@ -75,6 +75,10 @@ This detects Claude Code, Codex, Copilot CLI and opencode. To select one, append
 `--copilot` or `--opencode`. No manual clone or global npm installation is needed. The runtime is copied into
 `~/.claudespeak/runtime/`, so clearing the npm or plugin cache does not break installed hooks.
 
+Restart the configured agent, then run `/speak test` (`$speak test` in Codex) to hear a sample. Use
+`/speak status`, `/speak lang tr`, or `/speak off` to inspect settings, select Turkish, or mute summaries;
+Codex uses the same commands after `$speak`. The Claude Code plugin uses `/claudespeak:speak` instead.
+
 Setup downloads the approximately 410 MB voice model once. Plugins share this model and runtime across agents.
 Installing a plugin alone does not download the model: run its setup skill once, and again after updating the
 plugin to update the runtime. Existing direct hooks take precedence over plugin hooks to prevent duplicate speech.
