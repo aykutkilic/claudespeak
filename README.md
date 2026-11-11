@@ -18,6 +18,8 @@ still know when something is done or waiting for you.
   tell who is talking.
 - **One speaker at a time.** Everything goes through a single queue, and a machine-wide lock keeps voices from
   overlapping, even across processes.
+- **Earlier playback.** Once the summary text arrives, a short phrase plays while the next chunk is synthesised.
+  Chunk sizes adapt to measured inference speed, with sentence and clause boundaries preferred.
 - **Light mastering.** A gentle compressor and a small room reverb are applied. You can tune both or turn them off.
 - **`/speak`** in Claude Code, Copilot CLI and opencode, and **`$speak`** in Codex, change any setting in plain words:
   "make the reverb a bit lighter", "speak German in this repo", "voice M2 for my-api".
@@ -122,8 +124,11 @@ agent turn ends ─▶ hook.mjs ─▶ claude -p / codex exec / copilot -p / ope
 - Copilot CLI waits for its hooks, so the hook hands the event to a detached copy of itself and returns at once.
   It reads the message from the session's `events.jsonl`. The opencode plugin works with both 1.x and 2.x. It
   ignores subagent sessions and claudespeak's own summary sessions.
-- Summaries more than 3 minutes old are dropped instead of being read late. The next summary is synthesised
-  while the current one plays.
+- Summaries more than 3 minutes old are dropped instead of being read late. Synthesis starts with a short
+  phrase, then adapts chunk sizes to the time available during playback. Only one future chunk is buffered;
+  inference stays serial. A recap keeps its voice, effects and playback lock across chunks, with one opening
+  and closing chime. `skip` cancels the whole current recap; `stop` also clears queued recaps, including
+  prefetched audio. The agent still finishes writing the summary before speech synthesis begins.
 
 **Privacy:** the end-of-turn message is sent to the same provider your agent already uses, through its own
 CLI, to write the summary. Synthesis and playback are local. `model none` sends nothing anywhere.

@@ -1,6 +1,6 @@
 // Smoke test: install into a throwaway home (existing Claude / Codex / Copilot / opencode settings must survive), drive the CLI,
 // run the hook without a summariser, uninstall, and (with SMOKE_TTS=1 and the models downloaded) synthesise
-// one sentence. `npm test`.
+// a sentence and a progressively synthesized recap. `npm test`.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -137,6 +137,26 @@ if (process.env.SMOKE_TTS) {
   const { wav, duration } = await tts.call("Hello from claudespeak.", "en", loadVoiceStyle([path.join(models, "voice_styles", "F5.json")]), 6, 1.05);
   assert.ok(duration[0] > 0.5 && wav.length > tts.sampleRate * 0.5, "synthesis produced audio");
   console.log(`synthesised ${duration[0].toFixed(2)} s`);
+  const { SpeechQueue } = await import("../src/speech.mjs");
+  const text = "The voice now starts with a short phrase, while the remaining audio is prepared in the background. " +
+    "Longer chunks keep playback moving smoothly without waiting for the entire recap to finish synthesis.";
+  const chunks = [], start = performance.now();
+  let ready = 0, firstMs = 0;
+  const speech = new SpeechQueue({ gap: 0, onError: (e) => { throw e; },
+    synthesize: async (m) => {
+      const audio = await tts.call(m.text, "en", loadVoiceStyle([path.join(models, "voice_styles", "F5.json")]), 6, 1.05);
+      assert.ok(audio.wav.length > 0 && audio.duration[0] > 0);
+      ready++; return { duration: audio.duration[0] };
+    },
+    play: async (audio, m) => {
+      if (!chunks.length) { assert.equal(ready, 1, "start before the remaining audio is ready"); firstMs = performance.now() - start; }
+      chunks.push(m.text);
+    }, dispose: () => {},
+  });
+  speech.enqueue({ text, lang: "en" }); await speech.idle();
+  assert.ok(chunks.length > 1);
+  assert.equal(chunks.join(" "), text);
+  console.log(`streamed ${chunks.length} chunks: first audio ${Math.round(firstMs)} ms, all audio ${Math.round(performance.now() - start)} ms`);
 }
 
 fs.rmSync(T, { recursive: true, force: true });
